@@ -11,11 +11,12 @@ namespace Nette;
 /**
  * @deprecated
  */
-abstract class FreezableObject extends Object implements IFreezable
+abstract class FreezableObject implements IFreezable
 {
 	/** @var bool */
 	private $frozen = false;
 
+    use Nette\SmartObject;
 
 	/**
 	 * Makes the object unmodifiable.

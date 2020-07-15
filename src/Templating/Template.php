@@ -16,8 +16,10 @@ use Nette\Utils\Callback;
 /**
  * @deprecated
  */
-class Template extends Nette\Object implements ITemplate
+class Template implements ITemplate
 {
+    use Nette\SmartObject;
+
 	/** @var array of function (Template $sender); Occurs before a template is compiled - implement to customize the filters */
 	public $onPrepareFilters = array();
 

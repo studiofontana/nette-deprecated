@@ -13,8 +13,10 @@ use Nette;
 /**
  * @deprecated
  */
-class Callback extends Object
+class Callback
 {
+    use Nette\SmartObject;
+
 	/** @var callable */
 	private $cb;
 
