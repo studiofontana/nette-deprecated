@@ -10,7 +10,12 @@ namespace Nette\Templating;
 use Latte;
 use Nette;
 use Nette\Caching;
+use Nette\InvalidArgumentException;
+use Nette\MemberAccessException;
+use Nette\UnexpectedValueException;
 use Nette\Utils\Callback;
+use Nette\Utils\ObjectHelpers;
+use Nette\Utils\ObjectMixin;
 
 
 /**
@@ -313,10 +318,61 @@ class Template implements ITemplate
 					return Callback::invokeArgs($this->helpers[$lname], $args);
 				}
 			}
-			return parent::__call($name, $args);
+			return $this->smartObjectCall($name, $args);
 		}
 
 		return Callback::invokeArgs($this->helpers[$lname], $args);
+	}
+
+    private function smartObjectCall($name, $args)
+    {
+        $class = get_class($this);
+        $isProp = ObjectHelpers::hasProperty($class, $name);
+
+        if ($name === '') {
+            throw new MemberAccessException("Call to class '$class' method without name.");
+
+        } elseif ($isProp === 'event') { // calling event handlers
+            if (is_array($this->$name) || $this->$name instanceof \Traversable) {
+                foreach ($this->$name as $handler) {
+                    Callback::invokeArgs($handler, $args);
+                }
+            } elseif ($this->$name !== null) {
+                throw new UnexpectedValueException("Property $class::$$name must be array or null, " . gettype($this->$name) . ' given.');
+            }
+
+        } elseif ($isProp && $this->$name instanceof \Closure) { // closure in property
+            trigger_error("Invoking closure in property via \$obj->$name() is deprecated" . ObjectMixin::getSource(), E_USER_DEPRECATED);
+            return call_user_func_array($this->$name, $args);
+
+        } elseif (($methods = &ObjectMixin::getMethods($class)) && isset($methods[$name]) && is_array($methods[$name])) { // magic @methods
+            trigger_error("Magic methods such as $class::$name() are deprecated" . ObjectMixin::getSource(), E_USER_DEPRECATED);
+            list($op, $rp, $type) = $methods[$name];
+            if (count($args) !== ($op === 'get' ? 0 : 1)) {
+                throw new InvalidArgumentException("$class::$name() expects " . ($op === 'get' ? 'no' : '1') . ' argument, ' . count($args) . ' given.');
+
+            } elseif ($type && $args && !ObjectMixin::checkType($args[0], $type)) {
+                throw new InvalidArgumentException("Argument passed to $class::$name() must be $type, " . gettype($args[0]) . ' given.');
+            }
+
+            if ($op === 'get') {
+                return $rp->getValue($this);
+            } elseif ($op === 'set') {
+                $rp->setValue($this, $args[0]);
+            } elseif ($op === 'add') {
+                $val = $rp->getValue($this);
+                $val[] = $args[0];
+                $rp->setValue($this, $val);
+            }
+            return $this;
+
+        } elseif ($cb = ObjectMixin::getExtensionMethod($class, $name)) { // extension methods
+            trigger_error("Extension methods such as $class::$name() are deprecated" . ObjectMixin::getSource(), E_USER_DEPRECATED);
+            return Callback::invoke($cb, $this, ...$args);
+
+        } else {
+            ObjectHelpers::strictCall($class, $name);
+        }
 	}
 
 
